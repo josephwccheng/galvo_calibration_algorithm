@@ -4,29 +4,63 @@ import copy
 import matplotlib.pyplot as plt
 '''
 
+Problem:
+    Un-callibrated Galvo lenses increases the error of guiding the laser light from source to target, especially on the edges of the lense.
+    For example, when controlling an un-callibrated galvo lense to mark a "Square" shape on the target, the error causes the shape to distort
+    into other unwanted shapes. The further the Galvo guide the light away from the center, the larger margin of error. 
 Purpose:
-    To re-create the calibration logic from MarkingMate
-1. Mock data
-2. pixel to mm conversion
-3. coordination conversion
-4. COR algorithm
+    To implement Galvo Calibration algorithm with the help of CCD camera which provides the absolute error of controlled points 
+    marked from the laser source
 
-Note:
-    TrueField: 校正檔有效範圍，對應的實際長度，也就是 MarkingMate 校 正過程中，所輸入的「最短中心線長度」。
-        i.e. 100 = 100 mm x 100 mm
-    res: Resolution -> 64 points on true field
-    K: 校正檔使用範圍與全區域的比值。
+Pre-requisit:
+    1. Galvo Lenses: - Controls the laser light from source to target via analogue signal
+                     - Analogue signal is a 2D (x,y)coordinate system from the range of 0 to 2^16 (65536)
+                     - **Required** - analogue signal to mm conversion (maybe dependant on focus lense)
+    2. Focus lense:  - Lense used to focus laser light, impacted via distance from the lense to the target
+                     - True Field:  - 校正檔有效範圍，對應的實際長度，也就是 MarkingMate 校 正過程中，所輸入的「最短中心線長度」。
+                                    - i.e. 100 = 100 mm x 100 mm
+                     - K:           - 校正檔使用範圍與全區域的比值。
+    4. CCD camera:   - Located on the side of the Galvo Lense perpendicular to the surface of the target
+                     - Provides image of the target in pixels
+                     - **Required** - pixel to mm conversion
+    5. XY Table:     - High precise table that can move the target underneath the galvo lense (where laser marking is applied)
+                     - **Required** - Alignment between CCD center and Galvo center (i.e. when marking a point via galvo lense, 
+                                      the CCD image center should be right on the point)
+    6. Point Capture:- Software used to capture the points using the CCD camera's image
+       Software
+How:
+    1. Create a field of laser marked points i.e. 9x9=81 (prefer odd number) evenly distributed on the target via controlling the galvo lenses
+        - Note: the absolute ideal location of all 81 points is known from the analogue signal to mm conversion.
+        - Following is analogue points - **Required** - convert them to mm from the center
+        - Note 1: CENTER POINT - (32764 analogue,32764 analogue) -> (0 mm , 0 mm)
+        - Note 2: TOP LEFT POINT - (0 analogue,0 analogue) -> (-50 mm , 50 mm) assuming true field = 100 mm
+         |------------------------------------------------------------------------------|
+         |(0,0)      |(8191,0)      |(16382,0) ....     |(57337,0)      |(65535, 0)     |
+         |(0, 8191)  |(8191, 8191)  |(16382,8191) ....  |(57337,8191)   |(65535, 8191)  |
+         |(0, 16382) |(8191, 16382) |(16382,16382) .... |(57337,16382)  |(65535, 16382) |
+         |.          |              |                   |               |               |
+         |.          |              |                   |               |               |         
+         |.          |              |                   |               |               |
+         |(0, 57337) |              |                   |               |               |
+         |(0, 65535) (8191, 65535) (16382, 65535) .... (57337,65535)    |(65535, 65535) |
+         -------------------------------------------------------------------------------|
+    2. Using the CCD camera, capture the image with the CENTER POINT (32764 analogue,32764 analogue) as the center of the CCD image (in pixels)
+    3. Identify the un-callibrated absolute coordinates (mm) of each point marked by the Galvo in step 1
+        - requires point capture software of converting points to pixel coordinates i.e.(1024px, 1024px)
+        - convert these pixel coordinates into absolute coordinates (mm)
+    4. Calculate the ideal absolute distance (mm) from the center of each point of where the points should actually be
+    5. Obtain the absolute difference (mm) between the ideal and un-callibrated coordinates of the points marked by the galvo
+    6. Convert back into analogue unit and feed it back as a COR file for all points (9x9=81)
 
-Input:
-    A set of uncallibrated galvo controlled marks picked up by a CCD in Pixels 
-    i.e. (32000, 32000), (33000, 33000) ...... (62000, 62000) 
+Out of Scope:
+    1. 校正查表演算法 格點法 - Not required
+    2. ZComp: Z 補償偏位
 
 Output: COR 檔案資訊
     XComp: X 補償偏位
     YComp: Y 補償偏位
-    ZComp: Z 補償偏位
+    
 
-    校正查表演算法
 '''
 class Visualise():
     def plot_scatter(self, multi_coordinates: list):
